@@ -9,7 +9,6 @@
 
 ### Train Emotion detector
 - with all face expression images in the FER2013 Dataset
-- command -->
 - ```
   python TrainEmotionDetector.py
   ```
