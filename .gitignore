@@ -1,3 +1,2 @@
-/env
-/data
-emotion/
+env/
+artifacts/dataset/
