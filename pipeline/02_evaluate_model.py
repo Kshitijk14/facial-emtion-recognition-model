@@ -1,51 +1,70 @@
-# import required packages
+import sys
+import os
 import numpy as np
 import matplotlib.pyplot as plt
 from sklearn.metrics import confusion_matrix, classification_report, ConfusionMatrixDisplay
-import tensorflow as tf
 from tensorflow.keras.models import model_from_json
 from tensorflow.keras.preprocessing.image import ImageDataGenerator
 
+# Add the parent directory to PYTHONPATH
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-emotion_dict = {0: "Angry", 1: "Disgusted", 2: "Fearful", 3: "Happy", 4: "Neutral", 5: "Sad", 6: "Surprised"}
+from utils import setup_logger, load_params
 
-# load json and create model
-json_file = open('../artifacts/models/model_1/emotion_model.json', 'r')
-loaded_model_json = json_file.read()
-json_file.close()
-emotion_model = model_from_json(loaded_model_json)
 
-# load weights into new model
-emotion_model.load_weights("../artifacts/models/model_1/emotion_model.weights.h5")
-print("Loaded model from disk")
+def load_model(model_json_path, model_weights_path):
+    """Load the model architecture and weights from disk."""
+    with open(model_json_path, 'r') as json_file:
+        model = model_from_json(json_file.read())
+    model.load_weights(model_weights_path)
+    return model
 
-# Initialize image data generator with rescaling
-test_data_gen = ImageDataGenerator(rescale=1./255)
 
-# Preprocess all test images
-test_generator = test_data_gen.flow_from_directory(
-        '../artifacts/dataset/test',
-        target_size=(48, 48),
-        batch_size=64,
+def prepare_data_generator(test_data_path, target_size, batch_size):
+    """Prepare the test data generator."""
+    test_data_gen = ImageDataGenerator(rescale=1.0 / 255)
+    test_generator = test_data_gen.flow_from_directory(
+        test_data_path,
+        target_size=tuple(target_size),
+        batch_size=batch_size,
         color_mode="grayscale",
-        class_mode='categorical')
+        class_mode='categorical'
+    )
+    return test_generator
 
-# do prediction on test data
-predictions = emotion_model.predict(test_generator, steps=len(test_generator))
 
-# see predictions
-# for result in predictions:
-#     max_index = int(np.argmax(result))
-#     print(emotion_dict[max_index])
+def evaluate_and_report(model, test_generator, emotion_labels, logger):
+    """Evaluate the model and generate metrics."""
+    logger.info("Predicting test data...")
+    predictions = model.predict(test_generator, steps=len(test_generator))
 
-print("-----------------------------------------------------------------")
-# confusion matrix
-c_matrix = confusion_matrix(test_generator.classes, predictions.argmax(axis=1))
-print(c_matrix)
-cm_display = ConfusionMatrixDisplay(confusion_matrix=c_matrix, display_labels=emotion_dict)
-cm_display.plot(cmap=plt.cm.Blues)
-plt.show()
+    logger.info("Generating confusion matrix...")
+    c_matrix = confusion_matrix(test_generator.classes, predictions.argmax(axis=1))
+    cm_display = ConfusionMatrixDisplay(confusion_matrix=c_matrix, display_labels=emotion_labels.values())
+    cm_display.plot(cmap=plt.cm.Blues)
+    plt.show()
 
-# Classification report
-print("-----------------------------------------------------------------")
-print(classification_report(test_generator.classes, predictions.argmax(axis=1)))
+    logger.info("Generating classification report...")
+    report = classification_report(test_generator.classes, predictions.argmax(axis=1), target_names=list(emotion_labels.values()))
+    print(report)
+
+
+def main():
+    params = load_params("params.yaml")
+    logger = setup_logger("logs/evaluation.log")
+
+    logger.info("Loading the model...")
+    model = load_model(params['model']['json_path'], params['model']['weights_path'])
+
+    logger.info("Preparing test data...")
+    test_generator = prepare_data_generator(
+        params['test_data_path'],
+        params['target_size'],
+        params['batch_size']
+    )
+
+    evaluate_and_report(model, test_generator, params['emotion_dict'], logger)
+
+
+if __name__ == "__main__":
+    main()

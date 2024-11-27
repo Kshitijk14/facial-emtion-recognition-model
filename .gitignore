@@ -1,3 +1,5 @@
 env/
 emotion/
 artifacts/dataset/
+__pycache__/
+logs/

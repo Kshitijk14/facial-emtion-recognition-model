@@ -1,24 +1,23 @@
-rescale: 1.0/255
-target_size:
-  - 48
-  - 48
+target_size: [48, 48]
 batch_size: 64
+epochs: 1
+learning_rate: 0.0001
 
-train_data_path: "../artifacts/dataset/train"
-test_data_path: "../artifacts/dataset/test"
+train_data_path: "artifacts/dataset/train"
+test_data_path: "artifacts/dataset/test"
 
 model:
-  json_path: "../artifacts/models/model_1/emotion_model.json"
-  weights_path: "../artifacts/models/model_1/emotion_model.weights.h5"
-  keras_path: "../artifacts/models/model_1/emotion_model.keras"
+    json_path: "artifacts/models/model_2/emotion_model.json"
+    weights_path: "artifacts/models/model_2/emotion_model.weights.h5"
+    keras_path: "artifacts/models/model_2/emotion_model.keras"
 
 emotion_dict:
-  0: "Angry"
-  1: "Disgusted"
-  2: "Fearful"
-  3: "Happy"
-  4: "Neutral"
-  5: "Sad"
-  6: "Surprised"
+    0: "Angry"
+    1: "Disgusted"
+    2: "Fearful"
+    3: "Happy"
+    4: "Neutral"
+    5: "Sad"
+    6: "Surprised"
 
-cascade_classifier: "../cascadeClassifier/haarcascade_frontalface_default.xml"
+cascade_classifier: "cascadeClassifier/haarcascade_frontalface_default.xml"

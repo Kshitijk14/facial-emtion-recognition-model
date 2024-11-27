@@ -5,3 +5,5 @@ pillow
 scipy 
 matplotlib 
 scikit-learn
+PyYAML
+streamlit

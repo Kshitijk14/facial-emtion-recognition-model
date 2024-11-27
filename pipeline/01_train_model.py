@@ -1,75 +1,128 @@
-# import required packages
-import cv2
+import sys
+import os
 import tensorflow as tf
 from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import Conv2D, MaxPooling2D, Dense, Dropout, Flatten
 from tensorflow.keras.optimizers import Adam
 from tensorflow.keras.preprocessing.image import ImageDataGenerator
 
-# Initialize image data generator with rescaling
-train_data_gen = ImageDataGenerator(rescale=1./255)
-validation_data_gen = ImageDataGenerator(rescale=1./255)
+# Add the parent directory to PYTHONPATH
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-# Preprocess all test images
-train_generator = train_data_gen.flow_from_directory(
-        '../artifacts/dataset/train',
-        target_size=(48, 48),
-        batch_size=64,
-        color_mode="grayscale",
-        class_mode='categorical')
+from utils import setup_logger, load_params
 
-# Preprocess all train images
-validation_generator = validation_data_gen.flow_from_directory(
-        '../artifacts/dataset/test',
-        target_size=(48, 48),
-        batch_size=64,
-        color_mode="grayscale",
-        class_mode='categorical')
 
-# create model structure
-emotion_model = Sequential()
+def build_model(input_shape, num_classes):
+    model = Sequential()
 
-emotion_model.add(Conv2D(32, kernel_size=(3, 3), activation='relu', input_shape=(48, 48, 1)))
-emotion_model.add(Conv2D(64, kernel_size=(3, 3), activation='relu'))
-emotion_model.add(MaxPooling2D(pool_size=(2, 2)))
-emotion_model.add(Dropout(0.25))
+    model.add(Conv2D(32, kernel_size=(3, 3), activation='relu', input_shape=input_shape))
+    model.add(Conv2D(64, kernel_size=(3, 3), activation='relu'))
+    model.add(MaxPooling2D(pool_size=(2, 2)))
+    model.add(Dropout(0.25))
 
-emotion_model.add(Conv2D(128, kernel_size=(3, 3), activation='relu'))
-emotion_model.add(MaxPooling2D(pool_size=(2, 2)))
-emotion_model.add(Conv2D(128, kernel_size=(3, 3), activation='relu'))
-emotion_model.add(MaxPooling2D(pool_size=(2, 2)))
-emotion_model.add(Dropout(0.25))
+    model.add(Conv2D(128, kernel_size=(3, 3), activation='relu'))
+    model.add(MaxPooling2D(pool_size=(2, 2)))
+    model.add(Conv2D(128, kernel_size=(3, 3), activation='relu'))
+    model.add(MaxPooling2D(pool_size=(2, 2)))
+    model.add(Dropout(0.25))
 
-emotion_model.add(Flatten())
-emotion_model.add(Dense(1024, activation='relu'))
-emotion_model.add(Dropout(0.5))
-emotion_model.add(Dense(7, activation='softmax'))
+    model.add(Flatten())
+    model.add(Dense(1024, activation='relu'))
+    model.add(Dropout(0.5))
+    model.add(Dense(num_classes, activation='softmax'))
 
-cv2.ocl.setUseOpenCL(False)
+    return model
 
-# emotion_model.compile(loss='categorical_crossentropy', optimizer=Adam(lr=0.0001, decay=1e-6), metrics=['accuracy'])
-emotion_model.compile(
-        loss='categorical_crossentropy', 
-        optimizer=Adam(learning_rate=0.0001), 
-        metrics=['accuracy']
-)
+def train_model(params, logger):
+    try:
+        logger.info("Initializing data generators...")
+        
+        # Data generators for training and validation
+        train_data_gen = ImageDataGenerator(rescale=1.0 / 255)
+        validation_data_gen = ImageDataGenerator(rescale=1.0 / 255)
+        
+        # Train generator
+        train_generator = train_data_gen.flow_from_directory(
+            params['train_data_path'],
+            target_size=tuple(params['target_size']),
+            batch_size=params['batch_size'],
+            color_mode="grayscale",
+            class_mode='categorical'
+        )
+        logger.info(f"Train data generator initialized with {len(train_generator)} batches.")
 
-# Train the neural network/model
-emotion_model_info = emotion_model.fit(
-        train_generator,
-        steps_per_epoch = len(train_generator),
-        epochs=5,
-        validation_data = validation_generator,
-        validation_steps = len(validation_generator)
-)
+        # Validation generator
+        validation_generator = validation_data_gen.flow_from_directory(
+            params['test_data_path'],
+            target_size=tuple(params['target_size']),
+            batch_size=params['batch_size'],
+            color_mode="grayscale",
+            class_mode='categorical'
+        )
+        logger.info(f"Validation data generator initialized with {len(validation_generator)} batches.")
+        logger.info("************************************")
 
-# save model structure in jason file
-model_json = emotion_model.to_json()
-with open("../artifacts/models/model_1/emotion_model.json", "w") as json_file:
-        json_file.write(model_json)
+        logger.info("Building the model...")
+        input_shape = (*params['target_size'], 1)
+        num_classes = len(params['emotion_dict'])
+        model = build_model(input_shape, num_classes)
+        logger.info(f"Model architecture: {model.summary()}")
+        print(model.summary())
+        logger.info("Model built successfully.")
+        logger.info("************************************")
 
-# save trained model weight in .h5 file
-emotion_model.save_weights('../artifacts/models/model_1/emotion_model.weights.h5')
+        logger.info("Compiling the model...")
+        model.compile(
+            loss='categorical_crossentropy',
+            optimizer=Adam(learning_rate=params['learning_rate']),
+            metrics=['accuracy']
+        )
+        logger.info(f"Compilation completed. Optimizer: Adam, Learning rate: {params['learning_rate']}.")
+        logger.info("************************************")
 
-# Save the entire model as a .keras file
-emotion_model.save('../artifacts/models/model_1/emotion_model.keras')
+        logger.info("Starting training...")
+        history = model.fit(
+            train_generator,
+            steps_per_epoch=len(train_generator),
+            epochs=params['epochs'],
+            validation_data=validation_generator,
+            validation_steps=len(validation_generator)
+        )
+        logger.info("Training completed successfully.")
+        logger.info("************************************")
+
+        logger.info("Saving the model...")
+        model_dir = os.path.dirname(params['model']['json_path'])
+        os.makedirs(model_dir, exist_ok=True)
+
+        # Save model JSON
+        model_json = model.to_json()
+        with open(params['model']['json_path'], "w") as json_file:
+            json_file.write(model_json)
+        logger.info(f"Model architecture saved to {params['model']['json_path']}.")
+
+        # Save model weights
+        model.save_weights(params['model']['weights_path'])
+        logger.info(f"Model weights saved to {params['model']['weights_path']}.")
+
+        # Save the entire model in Keras format
+        model.save(params['model']['keras_path'])
+        logger.info(f"Entire model saved in Keras format to {params['model']['keras_path']}.")
+        logger.info("************************************")
+        
+        # Logging final metrics
+        logger.info("Final training metrics:")
+        logger.info(f"Training Accuracy: {history.history['accuracy'][-1]:.4f}")
+        logger.info(f"Validation Accuracy: {history.history['val_accuracy'][-1]:.4f}")
+        logger.info("Model training and saving completed successfully.")
+        logger.info("************************************")
+
+    except Exception as e:
+        logger.error("An error occurred during training.", exc_info=True)
+        raise
+
+
+if __name__ == "__main__":
+    params = load_params("params.yaml")
+    logger = setup_logger("logs/training.log")
+    train_model(params, logger)
